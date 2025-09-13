@@ -1,4 +1,5 @@
-import { useState, useEffect} from 'react';
+"use client";
+import { useState } from 'react';
 
 export default function BMI(){
     const [data, setData] = useState(null);
