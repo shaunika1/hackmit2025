@@ -11,7 +11,7 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Set your Toolhouse API key here or via environment variable
-TOOLHOUSE_API_KEY = os.environ.get("TOOLHOUSE_API_KEY") or "YOUR_TOOLHOUSE_API_KEY"
+TOOLHOUSE_API_KEY = os.environ.get("TOOLHOUSE_API_KEY") 
 
 def extract_text_from_pdf(filepath):
     doc = fitz.open(filepath)
