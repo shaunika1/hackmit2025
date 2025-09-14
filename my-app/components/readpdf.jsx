@@ -11,6 +11,8 @@ export default function ReadPDFPage() {
   const [error, setError] = useState("");
   const [runId, setRunId] = useState(null);
 
+  const BACKEND_URL = "http://localhost:5000"; // Point explicitly to Flask backend
+
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
@@ -37,29 +39,47 @@ export default function ReadPDFPage() {
     formData.append("pdf", file);
 
     try {
-      const res = await fetch("/api/upload-pdf", {
+      const res = await fetch(`${BACKEND_URL}/api/upload-pdf`, {
         method: "POST",
         body: formData,
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         setError(data.error || "Failed to upload PDF.");
         setUploading(false);
         return;
       }
 
-      const data = await res.json();
-      setPdfText(data.extracted_text_preview || "No text extracted from PDF.");
+      const textPreview = data.extracted_text_preview || "No text extracted from PDF.";
+      setPdfText(textPreview);
 
+      // Send extracted text as first message to /api/diagnose
+      const chatRes = await fetch(`${BACKEND_URL}/api/diagnose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: textPreview }),
+      });
+
+      if (!chatRes.ok) {
+        const chatData = await chatRes.json();
+        setError(chatData.error || "Failed to send PDF text to chat.");
+        setUploading(false);
+        return;
+      }
+
+      const chatData = await chatRes.json();
+
+      // Save run_id and initialize chat messages
+      setRunId(chatData.run_id);
       setMessages([
-        {
-          text: "Hello! I can answer questions about your uploaded medical history.",
-          isBot: true,
-        },
-        { text: data.extracted_text_preview, isBot: true },
+        { text: "Hello! I can answer questions about your uploaded medical history.", isBot: true },
+        { text: textPreview, isBot: true },
+        { text: chatData.response, isBot: true },
       ]);
     } catch (err) {
+      console.error("Upload error:", err);
       setError("Error connecting to the server.");
     } finally {
       setUploading(false);
@@ -78,7 +98,7 @@ export default function ReadPDFPage() {
     if (runId) payload.run_id = runId;
 
     try {
-      const res = await fetch("/api/diagnose", {
+      const res = await fetch(`${BACKEND_URL}/api/diagnose`, {
         method: runId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -87,19 +107,14 @@ export default function ReadPDFPage() {
       const data = await res.json();
 
       if (data.error) {
-        setMessages((prev) => [
-          ...prev,
-          { text: `Error: ${data.error}`, isBot: true },
-        ]);
+        setMessages((prev) => [...prev, { text: `Error: ${data.error}`, isBot: true }]);
       } else {
         setRunId(data.run_id);
         setMessages((prev) => [...prev, { text: data.response, isBot: true }]);
       }
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { text: "Error contacting AI agent.", isBot: true },
-      ]);
+    } catch (err) {
+      console.error("AI agent error:", err);
+      setMessages((prev) => [...prev, { text: "Error contacting AI agent.", isBot: true }]);
     } finally {
       setLoading(false);
     }
@@ -109,6 +124,7 @@ export default function ReadPDFPage() {
     <main className="flex flex-col items-center justify-start min-h-screen bg-gray-100 p-8">
       <h1 className="text-2xl font-bold mb-6">Upload Your Medical History</h1>
 
+      {/* Upload Section */}
       <div className="bg-white p-6 rounded shadow-lg w-full max-w-md flex flex-col gap-4 mb-6">
         <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 p-6 rounded cursor-pointer hover:border-blue-500 hover:bg-gray-50 transition">
           <span className="text-gray-600 text-center">
@@ -129,9 +145,11 @@ export default function ReadPDFPage() {
         >
           {uploading ? "Uploading..." : "Upload PDF"}
         </button>
+
         {error && <p className="text-red-600">{error}</p>}
       </div>
 
+      {/* PDF Preview */}
       {pdfText && (
         <div className="bg-white p-4 rounded shadow-lg w-full max-w-md mb-6 max-h-64 overflow-y-auto">
           <h2 className="font-semibold mb-2">Extracted PDF Text:</h2>
@@ -139,6 +157,7 @@ export default function ReadPDFPage() {
         </div>
       )}
 
+      {/* Chat Section */}
       {pdfText && (
         <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-4">
           <h3 className="text-lg font-semibold mb-4">Health Assistant</h3>
@@ -163,7 +182,7 @@ export default function ReadPDFPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your medical history..."
               className="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-              onKeyPress={(e) => e.key === "Enter" && handleSend()}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
               disabled={loading}
             />
             <button
