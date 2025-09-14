@@ -1,136 +1,172 @@
-"use client"
-import { useState, useRef } from "react";
+"use client";
+import { useState } from "react";
 
-export default function PdfUpload() {
+export default function ReadPDFPage() {
   const [file, setFile] = useState(null);
+  const [pdfText, setPdfText] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [aiSummary, setAiSummary] = useState("");
-  const dropRef = useRef();
+  const [error, setError] = useState("");
 
-  const handleFile = (selectedFile) => {
-    if (selectedFile && selectedFile.type === "application/pdf") {
-      setFile(selectedFile);
-      setMessage("");
-      setAiSummary(""); // Clear previous summary
-    } else {
-      setMessage("Please select a valid PDF file.");
-      setFile(null);
-    }
-  };
-
+  // Handle file selection
   const handleFileChange = (e) => {
-    handleFile(e.target.files[0]);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const droppedFile = e.dataTransfer.files[0];
-    handleFile(droppedFile);
-    dropRef.current.classList.remove("border-blue-400");
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dropRef.current.classList.add("border-blue-400");
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dropRef.current.classList.remove("border-blue-400");
-  };
-
-  const handleUpload = async () => {
-  if (!file) return;
-
-  setUploading(true);
-  const formData = new FormData();
-  formData.append("pdf", file);
-
-  try {
-    // Make sure this points to your Flask server
-    const res = await fetch("http://localhost:5000/api/upload-pdf", {
-      method: "POST",
-      body: formData,
-    });
-    
-    if (res.ok) {
-      const result = await res.json();
-      setMessage("Upload successful!");
-      
-      // Your Flask returns pdf_text, not ai_summary
-      if (result.pdf_text) {
-        setAiSummary(result.pdf_text);
-      }
-      
-      setFile(null);
-    } else {
-      const errorData = await res.json();
-      setMessage(`Upload failed: ${errorData.error || 'Unknown error'}`);
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setPdfText("");
+      setMessages([]);
+      setError("");
     }
-  } catch (err) {
-    console.error(err);
-    setMessage("Error uploading file. Make sure Flask server is running on port 5000.");
-  } finally {
-    setUploading(false);
-  }
+  };
 
+  // Upload PDF
+  const handleUpload = async () => {
+    if (!file) {
+      setError("Please select a PDF file first.");
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+    setPdfText("");
+
+    const formData = new FormData();
+    formData.append("pdf", file);
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/api/upload-pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Failed to upload PDF.");
+        setUploading(false);
+        return;
+      }
+
+      const data = await res.json();
+      setPdfText(data.pdf_text || "No text extracted from PDF.");
+
+      // Initialize chatbot with PDF context
+      setMessages([
+        {
+          text: "Hello! I can answer questions about your uploaded medical history.",
+          isBot: true,
+        },
+        { text: data.pdf_text, isBot: true },
+      ]);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError("Error connecting to the server.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Send chat message
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    const userMessage = { text: input, isBot: false };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: input }),
+      });
+
+      const data = await res.json();
+      const botText = data?.response || "Sorry, I couldn't get a response from the AI.";
+      setMessages((prev) => [...prev, { text: botText, isBot: true }]);
+    } catch (err) {
+      console.error("AI error:", err);
+      setMessages((prev) => [...prev, { text: "Error contacting AI agent.", isBot: true }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 p-6 border border-gray-300 rounded-md shadow-sm">
-      <h2 className="text-xl font-semibold mb-4">Upload Medical History PDF</h2>
+    <main className="flex flex-col items-center justify-start min-h-screen bg-gray-100 p-8">
+      <h1 className="text-2xl font-bold mb-6">Upload Your Medical History</h1>
 
-      <div 
-        ref={dropRef}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className="mb-4 p-8 border-2 border-dashed border-gray-300 rounded-md text-center cursor-pointer hover:border-gray-400 transition"
-        onClick={() => document.getElementById("pdfInput").click()}
-      >
-        {file ? (
-          <p className="text-gray-700 font-medium">{file.name}</p>
-        ) : (
-          <p className="text-gray-500">
-            Drag & drop a PDF here, or click to select a file
-          </p>
-        )}
-      </div>
+      {/* PDF Upload Section */}
+<div className="bg-white p-6 rounded shadow-lg w-full max-w-md flex flex-col gap-4 mb-6">
+  <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 p-6 rounded cursor-pointer hover:border-blue-500 hover:bg-gray-50 transition">
+    <span className="text-gray-600 text-center">
+      Drag or drop files here, or click to upload files
+    </span>
+    <input
+      type="file"
+      accept=".pdf"
+      onChange={handleFileChange}
+      className="hidden"
+    />
+  </label>
 
-      <input
-        id="pdfInput"
-        type="file"
-        accept="application/pdf"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+  <button
+    onClick={handleUpload}
+    disabled={!file || uploading}
+    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+  >
+    {uploading ? "Uploading..." : "Upload PDF"}
+  </button>
+  {error && <p className="text-red-600">{error}</p>}
+</div>
 
-      <button
-        onClick={handleUpload}
-        disabled={uploading || !file}
-        className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors duration-200 font-medium"
-      >
-        {uploading ? "Processing..." : "Upload & Analyze"}
-      </button>
 
-      {message && (
-        <div className={`mt-4 p-3 rounded-md ${
-          message.includes('successful') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-        }`}>
-          {message}
+      {/* Extracted PDF Text */}
+      {pdfText && (
+        <div className="bg-white p-4 rounded shadow-lg w-full max-w-md mb-6 max-h-64 overflow-y-auto">
+          <h2 className="font-semibold mb-2">Extracted PDF Text:</h2>
+          <p className="text-gray-800 whitespace-pre-wrap">{pdfText}</p>
         </div>
       )}
 
-      {aiSummary && (
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
-          <h3 className="text-lg font-semibold text-blue-800 mb-2">AI Analysis Summary:</h3>
-          <p className="text-blue-700 leading-relaxed">{aiSummary}</p>
+      {/* Chatbot */}
+      {pdfText && (
+        <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-4">
+          <h3 className="text-lg font-semibold mb-4">Health Assistant</h3>
+
+          <div className="h-64 overflow-y-auto border rounded p-3 mb-4 bg-gray-50">
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`mb-2 ${msg.isBot ? "text-blue-600" : "text-gray-800"}`}
+              >
+                <strong>{msg.isBot ? "Bot: " : "You: "}</strong>
+                {msg.text}
+              </div>
+            ))}
+            {loading && <div className="text-blue-600">Bot is typing...</div>}
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask about your medical history..."
+              className="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+              onKeyPress={(e) => e.key === "Enter" && handleSend()}
+            />
+            <button
+              onClick={handleSend}
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Send
+            </button>
+          </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
