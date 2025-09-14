@@ -3,15 +3,17 @@ from flask_cors import CORS
 import os
 import fitz  # PyMuPDF
 import requests
+from bpm_reader import get_bpm  # Import your BPM function
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Enable CORS for all routes
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Set your Toolhouse API key here or via environment variable
-TOOLHOUSE_API_KEY = os.environ.get("TOOLHOUSE_API_KEY") 
+# Toolhouse API key and agent ID (hardcoded here; replace with your actual values)
+TOOLHOUSE_API_KEY = "th-4ljWWSayjDvmgVQVOpkaC_4dX_9mSk_HcOhXvymdGvs"
+TOOLHOUSE_AGENT_ID = "0174f557-96ff-4b58-b8fe-9beee93670e0"
 
 def extract_text_from_pdf(filepath):
     doc = fitz.open(filepath)
@@ -20,27 +22,13 @@ def extract_text_from_pdf(filepath):
         text += page.get_text()
     return text
 
-# Root route
-@app.route("/")
-def home():
-    return "Flask app is running!"
+@app.route("/api/bpm", methods=["GET"])
+def get_bpm_route():
+    bpm = get_bpm()
+    return jsonify({"bpm": bpm})
 
-# Debug route
-@app.route("/debug/routes")
-def list_routes():
-    routes = []
-    for rule in app.url_map.iter_rules():
-        routes.append({
-            'endpoint': rule.endpoint,
-            'methods': sorted(rule.methods),
-            'url': str(rule)
-        })
-    return jsonify(routes)
-
-# PDF upload route
 @app.route("/api/upload-pdf", methods=["POST"])
 def upload_pdf():
-    print("upload_pdf function called!")  # Debug print
     if "pdf" not in request.files:
         return jsonify({"error": "No file part"}), 400
 
@@ -52,38 +40,71 @@ def upload_pdf():
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(filepath)
 
-        pdf_text = extract_text_from_pdf(filepath)
+        extracted_text = extract_text_from_pdf(filepath)
 
-        return jsonify({"message": "File uploaded successfully", "pdf_text": pdf_text}), 200
+        return jsonify({
+            "message": "File uploaded successfully",
+            "extracted_text_preview": extracted_text[:500]  # Return first 500 chars as preview
+        }), 200
     else:
         return jsonify({"error": "Invalid file type"}), 400
 
-# Toolhouse AI agent route
-@app.route("/api/agent", methods=["POST"])
-def agent():
-    user_input = request.json.get("message")
-    if not user_input:
-        return jsonify({"error": "No message provided"}), 400
+@app.route('/api/diagnose', methods=['POST', 'PUT'])
+def diagnose():
+    # Validate JSON content type
+    if not request.is_json:
+        return jsonify({'error': 'Request must be JSON'}), 400
 
-    # Call Toolhouse API
-    response = requests.post(
-        "https://api.toolhouse.ai/v1/agent/respond",
-        headers={
-            "Authorization": f"Bearer {TOOLHOUSE_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={"message": user_input}
-    )
+    # Parse JSON safely
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({'error': 'Invalid JSON'}), 400
 
-    if response.status_code != 200:
-        return jsonify({"error": "Toolhouse API error", "details": response.text}), 500
+    message = data.get('message')
+    run_id = data.get('run_id')  # Required for PUT requests
 
-    data = response.json()
-    return jsonify(data)
+    if not message:
+        return jsonify({'error': 'No message provided'}), 400
+
+    bpm = get_bpm()
+    prompt = f"A patient has a BPM of {bpm}. {message}"
+
+    headers = {
+        "Authorization": f"Bearer {TOOLHOUSE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        if request.method == 'PUT':
+            if not run_id:
+                return jsonify({'error': 'run_id is required for PUT requests'}), 400
+            url = f"https://agents.toolhouse.ai/{TOOLHOUSE_AGENT_ID}/{run_id}"
+            response = requests.put(
+                url,
+                json={"message": prompt},
+                headers=headers
+            )
+        else:  # POST request to start new conversation
+            url = f"https://agents.toolhouse.ai/{TOOLHOUSE_AGENT_ID}"
+            response = requests.post(
+                url,
+                json={"message": prompt},
+                headers=headers
+            )
+
+        response.raise_for_status()
+
+        new_run_id = response.headers.get('X-Toolhouse-Run-ID')
+        result = response.json()
+        diagnosis = result.get('output') or result.get('choices', [{}])[0].get('message', {}).get('content', 'No response.')
+
+        return jsonify({
+            'run_id': new_run_id,
+            'response': diagnosis
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
-    print("Starting Flask app...")
-    print("Registered routes:")
-    for rule in app.url_map.iter_rules():
-        print(f"  {rule.endpoint}: {sorted(rule.methods)} {rule}")
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
