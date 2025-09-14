@@ -44,24 +44,42 @@ function StyledLinkButton({
   );
 }
 
-// Simple chatbot placeholder component
+// Chatbot now connected to Flask backend
 function SimpleChatbot({ bpm }) {
   const [messages, setMessages] = useState([
     { text: `Hello! I see your current BPM is ${bpm}. How can I help you today?`, isBot: true }
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
-    
+
     const userMessage = { text: input, isBot: false };
-    const botResponse = { 
-      text: `Thanks for your message! Your BPM of ${bpm} looks ${bpm > 100 ? 'a bit elevated' : 'normal'}. How are you feeling?`, 
-      isBot: true 
-    };
-    
-    setMessages(prev => [...prev, userMessage, botResponse]);
+    setMessages(prev => [...prev, userMessage]);
     setInput('');
+    setLoading(true);
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: input })
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to reach backend");
+      }
+
+      const data = await res.json();
+      const botMessage = { text: data.reply || "Sorry, I didn’t understand that.", isBot: true };
+      setMessages(prev => [...prev, botMessage]);
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [...prev, { text: "Error connecting to AI agent.", isBot: true }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -75,6 +93,7 @@ function SimpleChatbot({ bpm }) {
             {msg.text}
           </div>
         ))}
+        {loading && <div className="text-blue-400">Bot is typing...</div>}
       </div>
       
       <div className="flex gap-2">
@@ -89,8 +108,9 @@ function SimpleChatbot({ bpm }) {
         <button
           onClick={handleSend}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={loading}
         >
-          Send
+          {loading ? "..." : "Send"}
         </button>
       </div>
     </div>
@@ -98,7 +118,6 @@ function SimpleChatbot({ bpm }) {
 }
 
 export default function Page() {
-  // Later this BPM will come from your Raspberry Pi backend
   const bpm = 110;
 
   return (
