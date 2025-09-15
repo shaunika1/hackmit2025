@@ -2,7 +2,7 @@
 #Our Project for HackMIT 2025
 # Demo Video 
 https://www.youtube.com/watch?v=TgkCfh6O53s 
-## Inspiration
+
 # What inspired you to create this project?
 We are all familiar with searching up symptoms on Google and being shown the worst-case diagnosis, ranging from cancer to life-threatening kidney failure. Despite AI’s significant contributions to healthcare, few tools are accessible directly to patients, and even fewer are trained to display consistent, reliable results. Hack My Heart was designed to address this gap by integrating hardware and software to deliver preliminary health consultations. By gathering vital signs and symptoms, it provides personalized guidance, helping patients prepare for a doctor’s visit or supporting those without immediate access to healthcare.
 # What it does
