@@ -11,8 +11,11 @@ The user places their finger on a pulse sensor, which records BPM data and sends
 We built our project using a pulse sensor connected to an Arduino. We used Flask to make the backend of the website that stores sensor data, PDF upload data, and implements the Toolhouse AI agent. Lastly, we utilized React.js and Next.js to make the frontend of the website. 
 # Individual Contributions
 Sarah: Created the pulse sensor, configured the Arduino, modified open source code to interpret the voltage from the sensor as BPM and connected the code for the Arduino to the website
+
 Shaunika: Created the preliminary backend, worked on frontend with teammates, attempted to connect AI agent to website, made project description and presentation
+
 Anahita: Refined backend, successfully connected AI agent to website, worked with Sarah to create smooth transition from pi to website
+
 Aboubakary: Built React components, designed the website UI, integrated BPM data fetching from Arduino backend, and tested functionality to ensure smooth performance.
 Everyone: Provided moral support, had a blast!
 # Challenges we ran into
