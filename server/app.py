@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+
 import fitz  # PyMuPDF
 import requests
 from bpm_reader import get_bpm  # Your BPM function
@@ -8,8 +9,10 @@ from bpm_reader import get_bpm  # Your BPM function
 app = Flask(__name__)
 CORS(app)
 
+
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 # Toolhouse API credentials
 TOOLHOUSE_API_KEY = "th-4ljWWSayjDvmgVQVOpkaC_4dX_9mSk_HcOhXvymdGvs"
@@ -34,6 +37,7 @@ def get_bpm_route():
     return jsonify({"bpm": bpm})
 
 
+
 @app.route("/api/upload-pdf", methods=["POST"])
 def upload_pdf():
     if "pdf" not in request.files:
@@ -53,6 +57,7 @@ def upload_pdf():
         }), 200
     else:
         return jsonify({"error": "Invalid file type"}), 400
+
 
 
 @app.route("/api/diagnose", methods=["POST", "PUT"])
