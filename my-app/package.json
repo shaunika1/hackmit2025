@@ -20,5 +20,6 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.3",
     "tailwindcss": "^4"
-  }
+  },
+  "proxy": "http://localhost:5000"
 }
